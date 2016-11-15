@@ -48,42 +48,6 @@ class CompBuilder extends Module
     }
 
 
-
-    public function prepareNewTab()
-    {
-        $query = $this->getContent();
-        $base_url = Tools::getHttpHost(true).__PS_BASE_URI__;
-        //$js = $this->context->controller->addJs($this->_path . ''.$base_url.'/modules/compbuilder/views/templates/js/main.js');
-
-        $product = new Product((int)Tools::getValue('id_product'));
-        // Accessories block
-        $accessories = Product::getAccessoriesLight($this->context->language->id, $product->id);
-
-        if ($post_accessories = Tools::getValue('inputAccessories')) {
-            $post_accessories_tab = explode('-', $post_accessories);
-            foreach ($post_accessories_tab as $accessory_id) {
-                if (!$this->haveThisAccessory($accessory_id, $accessories) && $accessory = Product::getAccessoryById($accessory_id)) {
-                    $accessories[] = $accessory;
-                }
-            }
-        }
-
-
-        $smarty = $this->context->smarty->assign(array(
-           // 'js' => $js,
-            'base_url' => $base_url,
-            'id_product' => (int)Tools::getValue('id_product'),
-            'accessories' => $accessories,
-            'languages' => $this->context->controller->_languages,
-            'default_language' => (int)Configuration::get('PS_LANG_DEFAULT')
-        ));
-
-        //$smarty->append(array('city' => 'Lincoln', 'state' => 'Nebraska'));
-        //return $smarty;
-        return $this->display(__FILE__, 'views/templates/admin/sample.tpl');
-    }
-
-
     public function hookDisplayAdminProductsExtra($params)
     {
         if (Validate::isLoadedObject($product = new Product((int)Tools::getValue('id_product'))))
@@ -98,13 +62,63 @@ class CompBuilder extends Module
 
     }
 
+    protected $submitted_tabs;
+
+    public function prepareNewTab()
+    {
+        $query = $this->getContent();
+        $base_url = Tools::getHttpHost(true).__PS_BASE_URI__;
+        //$js = $this->context->controller->addJs($this->_path . ''.$base_url.'/modules/compbuilder/views/templates/js/main.js');
+
+        $product = new Product((int)Tools::getValue('id_product'));
+        // Accessories block
+        $accessories = Product::getAccessoriesLight($this->context->language->id, $product->id);
+
+       if ($this->isTabSubmitted('Computer builder')) {
+            $this->updateAccessories($product);
+        }
+
+        if ($post_accessories = Tools::getValue('inputAccessories')) {
+            $post_accessories_tab = explode('-', $post_accessories);
+            foreach ($post_accessories_tab as $accessory_id) {
+                if (!$this->haveThisAccessory($accessory_id, $accessories) && $accessory = Product::getAccessoryById($accessory_id)) {
+                    $accessories[] = $accessory;
+                }
+            }
+        }
+
+        $smarty = $this->context->smarty->assign(array(
+            // 'js' => $js,
+            'base_url' => $base_url,
+            'id_product' => (int)Tools::getValue('id_product'),
+            'accessories' => $accessories,
+            'languages' => $this->context->controller->_languages,
+            'default_language' => (int)Configuration::get('PS_LANG_DEFAULT')
+        ));
+
+        //$smarty->append(array('city' => 'Lincoln', 'state' => 'Nebraska'));
+        //return $smarty;
+        return $this->display(__FILE__, 'views/templates/admin/sample.tpl');
+    }
+
+
+    protected function isTabSubmitted($tab_name)
+    {
+        if (!is_array($this->submitted_tabs)) {
+            $this->submitted_tabs = Tools::getValue('submitted_tabs');
+        }
+
+        if (is_array($this->submitted_tabs) && in_array($tab_name, $this->submitted_tabs)) {
+            return true;
+        }
+
+        return false;
+    }
+
 
     public function getContent()
     {
-
-
         $product_id = (int)Tools::getValue('id_product');
-
         //post process part
         if (Tools::isSubmit('saveMyAssociations')) {
             // see the function below, a simple query to delete all the associations on a product
@@ -115,20 +129,38 @@ class CompBuilder extends Module
                     array_pop($associations_id);
                     //insert all the association we have made.
                     $this->changeMyAssociations($associations_id, $product_id);
-
                 }
             }
         }
 
         $my_associations = CompBuilder::getAssociationsLight($this->context->language->id, Tools::getValue('id_product')); //function that will retrieve the array of all the product associated on my module table.
 
-//        $this->context->smarty->assign(array(
-//            'my_associations' => $my_associations,
-//            'product_id' => (int)Tools::getValue('id_product')
-//        ));
-
         return $my_associations;
+    }
 
+    protected function deleteMyAssociations($product_id){
+        return Db::getInstance()->execute('DELETE FROM `'._DB_PREFIX_.'ps_accessory` WHERE `id_product_1` = '.(int)$product_id);
+    }
+
+    protected function changeMyAssociations($associations_id, $product_id){
+        foreach ($associations_id as $id_product_2)
+            Db::getInstance()->insert('ps_accessory', array(
+                'id_product_1' => (int)$product_id,
+                'id_product_2' => (int)$id_product_2
+            ));
+    }
+
+
+    public function updateAccessories($product)
+    {
+        $product->deleteAccessories();
+        if ($associations = Tools::getValue('inputMyAssociations')) {
+            $associations_id = array_unique(explode('-', $associations));
+            if (count($associations_id)) {
+                array_pop($associations_id);
+                $product->changeAccessories($associations_id);
+            }
+        }
     }
 
 //our little function to get the already saved list, for each product we will retrieve id, name and reference with a join on the product/product_lang tables.
@@ -156,5 +188,6 @@ class CompBuilder extends Module
 
         return Db::getInstance()->executeS($sql);
     }
+
 
 }

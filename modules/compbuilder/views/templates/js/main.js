@@ -30,7 +30,7 @@ $(document).ready(function(){
     this.getAssociationsIds = function()
     {
         if ($('#inputMyAssociations').val() === undefined)
-             	return id_product;
+            return id_product;
         return id_product + ',' + $('#inputMyAssociations').val().replace(/\-/g,',');
     }
     //function to add a new association, adds it in the hidden input and also as a visible div, with a button to delete the association any time.

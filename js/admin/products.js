@@ -791,7 +791,12 @@ product_tabs['Prices'] = new function(){
 	};
 }
 
-product_tabs['Associations'] = new function(){
+product_tabs['Associations'] = new function(){https://www.youtube.com/watch?v=nDVbQjBeULQ
+
+
+
+
+	
 	var self = this;
 	this.initAccessoriesAutocomplete = function (){
 		$('#product_autocomplete_input')
