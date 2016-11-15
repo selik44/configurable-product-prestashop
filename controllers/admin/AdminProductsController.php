@@ -4755,7 +4755,7 @@ class AdminProductsControllerCore extends AdminController
                     'token' => $this->token
                 ));
             } else {
-                $this->displayWarning($this->l('You must save the product in this shop before managing warehouses.'));
+                $this->displayWarning($this->l('You must saveg the product in this shop before managing warehouses.'));
             }
         } else {
             $this->displayWarning($this->l('You must save this product before managing warehouses.'));

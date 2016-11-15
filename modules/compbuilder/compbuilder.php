@@ -29,148 +29,132 @@ class CompBuilder extends Module
     public function install()
     {
         if (!parent::install() OR
-            !$this->alterTable('add') OR
-            !$this->registerHook('actionAdminControllerSetMedia') OR
+            !$this->registerHook('displayAdminProductsExtra') OR
             !$this->registerHook('actionProductUpdate') OR
-            !$this->registerHook('displayAdminProductsExtra'))
+            !$this->registerHook('getContent')
+        )
             return false;
         return true;
     }
 
     public function uninstall()
     {
-        if (!parent::uninstall() OR !$this->alterTable('remove'))
+        if (!parent::uninstall() ||
+            !Configuration::deleteByName('compbuilder')
+        )
             return false;
+
         return true;
     }
-
-
-    public function alterTable($method)
-    {
-        switch ($method) {
-            case 'add':
-                $sql = 'ALTER TABLE ' . _DB_PREFIX_ . 'product_lang ADD `custom_field` TEXT NOT NULL';
-                break;
-
-            case 'remove':
-                $sql = 'ALTER TABLE ' . _DB_PREFIX_ . 'product_lang DROP COLUMN `custom_field`';
-                break;
-        }
-
-        if(!Db::getInstance()->Execute($sql))
-            return false;
-        return true;
-    }
-
-
-
 
 
 
     public function prepareNewTab()
     {
+        $query = $this->getContent();
+        $base_url = Tools::getHttpHost(true).__PS_BASE_URI__;
+        //$js = $this->context->controller->addJs($this->_path . ''.$base_url.'/modules/compbuilder/views/templates/js/main.js');
 
-        $this->context->smarty->assign(array(
-            'custom_field' => '',
+        $product = new Product((int)Tools::getValue('id_product'));
+        // Accessories block
+        $accessories = Product::getAccessoriesLight($this->context->language->id, $product->id);
+
+        if ($post_accessories = Tools::getValue('inputAccessories')) {
+            $post_accessories_tab = explode('-', $post_accessories);
+            foreach ($post_accessories_tab as $accessory_id) {
+                if (!$this->haveThisAccessory($accessory_id, $accessories) && $accessory = Product::getAccessoryById($accessory_id)) {
+                    $accessories[] = $accessory;
+                }
+            }
+        }
+
+
+        $smarty = $this->context->smarty->assign(array(
+           // 'js' => $js,
+            'base_url' => $base_url,
             'id_product' => (int)Tools::getValue('id_product'),
+            'accessories' => $accessories,
             'languages' => $this->context->controller->_languages,
             'default_language' => (int)Configuration::get('PS_LANG_DEFAULT')
         ));
 
+        //$smarty->append(array('city' => 'Lincoln', 'state' => 'Nebraska'));
+        //return $smarty;
+        return $this->display(__FILE__, 'views/templates/admin/sample.tpl');
     }
+
 
     public function hookDisplayAdminProductsExtra($params)
     {
         if (Validate::isLoadedObject($product = new Product((int)Tools::getValue('id_product'))))
         {
             $this->prepareNewTab();
-            return $this->display(__FILE__, 'newfieldstut.tpl');
+            return $this->display(__FILE__, 'views/templates/admin/sample.tpl');
         }
     }
 
 
-    public function hookActionAdminControllerSetMedia($params)
+    public function hookActionProductUpdate($params) {
+
+    }
+
+
+    public function getContent()
     {
 
-        // add necessary javascript to products back office
-        if($this->context->controller->controller_name == 'AdminProducts' && Tools::getValue('id_product'))
-        {
-            $this->context->controller->addJS($this->_path.'/js/newfieldstut.js');
+
+        $product_id = (int)Tools::getValue('id_product');
+
+        //post process part
+        if (Tools::isSubmit('saveMyAssociations')) {
+            // see the function below, a simple query to delete all the associations on a product
+            $this->deleteMyAssociations($product_id);
+            if ($associations = Tools::getValue('inputMyAssociations')) {
+                $associations_id = array_unique(explode('-', $associations));
+                if (count($associations_id)) {
+                    array_pop($associations_id);
+                    //insert all the association we have made.
+                    $this->changeMyAssociations($associations_id, $product_id);
+
+                }
+            }
         }
 
-    }
+        $my_associations = CompBuilder::getAssociationsLight($this->context->language->id, Tools::getValue('id_product')); //function that will retrieve the array of all the product associated on my module table.
 
-    public function hookActionProductUpdate($params)
-    {
-        // get all languages
-        // for each of them, store the custom field!
-
-        $id_product = (int)Tools::getValue('id_product');
-        $languages = Language::getLanguages(true);
-        foreach ($languages as $lang) {
-            if(!Db::getInstance()->update('product_lang', array('custom_field'=> pSQL(Tools::getValue('custom_field_'.$lang['id_lang']))) ,'id_lang = ' . $lang['id_lang'] .' AND id_product = ' .$id_product ))
-                $this->context->controller->_errors[] = Tools::displayError('Error: ').mysql_error();
-        }
-
-    }
-
-
-    public function getComponents(){
-        $id_product = (int)Tools::getValue('id_product');
-
-        $sql = 'SELECT prod.id_product, prod.id_category_default, pl.name, c_lang.name
-        FROM ps_product prod
-        INNER JOIN ps_product_lang pl ON prod.id_product = pl.id_product
-        INNER JOIN ps_category pc ON prod.id_category_default = pc.id_category
-        INNER JOIN ps_category_lang c_lang ON pc.id_category = c_lang.id_category 
-        WHERE prod.id_product = '.$id_product.' AND pc.id_category = 5 AND c_lang.id_lang = 1 AND pl.id_lang = 1';
-
-        $result = Db::getInstance()->getRow($sql);
-        foreach ($result as $r){
-            $r;
-        }
-
-
-
-//       $smarty_variable =   $this->context->smarty->assign(array(
-//            'custom_field' => '',
-//            'id_product' => (int)Tools::getValue('id_product'),
-//            'languages' => $this->context->controller->_languages,
-//            'default_language' => (int)Configuration::get('PS_LANG_DEFAULT')
+//        $this->context->smarty->assign(array(
+//            'my_associations' => $my_associations,
+//            'product_id' => (int)Tools::getValue('id_product')
 //        ));
 
+        return $my_associations;
 
-        return  var_dump($result);
     }
 
-//    public function getCustomField($id_product)
-//    {
-//        $result = Db::getInstance()->ExecuteS('SELECT custom_field, id_lang FROM '._DB_PREFIX_.'product_lang WHERE id_product = ' . (int)$id_product);
-//        if(!$result)
-//            return array();
-//
-//        foreach ($result as $field) {
-//            $fields[$field['id_lang']] = $field['custom_field'];
-//        }
-//
-//        return $fields;
-//    }
+//our little function to get the already saved list, for each product we will retrieve id, name and reference with a join on the product/product_lang tables.
+    public static function getAssociationsLight($id_lang, $id_product, Context $context = null)
+    {
+        if (!$context)
+            $context = Context::getContext();
 
-//    public function addComponents(){
-//
-//    }
-//
+        $sql = 'SELECT p.id_product, p.reference, pl.name
+                FROM `'._DB_PREFIX_ .'accessory`
+                LEFT JOIN `'._DB_PREFIX_ .'product` p ON (p.id_product = id_product_2)
+                LEFT JOIN `'._DB_PREFIX_.'product_lang` pl ON (
+                    p.id_product = pl.id_product
+                    AND pl.id_lang = 2
+                )
+                WHERE id_product_1 = '.(int)$id_product;
 
+//        $sql = 'SELECT p.`id_product`, p.`reference`, pl.`name`
+//                FROM `'._DB_PREFIX_.'accessory`
+//                LEFT JOIN `' . _DB_PREFIX_ . 'product` p ON (p.`id_product`= `id_product_2`)
+//                LEFT JOIN `' . _DB_PREFIX_ . 'product_lang` pl ON (
+//                    p.`id_product` = pl.`id_product`
+//                )
+//                WHERE `id_product_1` = ' . (int)$id_product;
 
-//    public function getProcessors(){
-//        $sql = query('SELECT prod.id_product, prod.id_category_default, pl.name, c_lang.name
-//	FROM ps_product prod
-//	INNER JOIN ps_product_lang pl ON prod.id_product = pl.id_product
-//	INNER JOIN ps_category pc ON prod.id_category_default = pc.id_category
-//	INNER JOIN ps_category_lang c_lang ON pc.id_category = c_lang.id_category
-//	WHERE prod.id_product = 1 AND pc.id_category = 5 AND c_lang.id_lang = 1 AND pl.id_lang = 1');
-//
-//        //$id = null;
-//
-//    }
+        return Db::getInstance()->executeS($sql);
+    }
+
 }
